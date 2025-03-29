@@ -26,7 +26,7 @@ class User(UserMixin, db.Model):
     taught_subjects = db.relationship('TeacherSubject', back_populates='teacher')
     class_teacher = db.relationship('Class', back_populates='class_teacher')
     recorded_attendances = db.relationship('AttendanceSession', back_populates='recorder')
-    recorded_grades = db.relationship('StudentPerformance', back_populates='recorded_by')
+    recorded_performances = db.relationship('StudentPerformance', back_populates='recorded_by_user')
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -160,7 +160,7 @@ class StudentPerformance(db.Model):
     # Relationships
     student = db.relationship('Student', back_populates='performances')
     assessment = db.relationship('Assessment', back_populates='performances')
-    recorded_by_user = db.relationship('User', back_populates='recorded_grades')
+    recorded_by_user = db.relationship('User', back_populates='recorded_performances')
 
 class AttendanceSession(db.Model):
     """Attendance session model (when attendance was taken)"""

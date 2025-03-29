@@ -7,8 +7,11 @@ name = "pypi"
 flask = "*"
 flask-sqlalchemy = "*"
 werkzeug = "*"
-flask-login = "*"
 flask-migrate = "*"
+flask-jwt-extended = "*"
+flask-login = "*"
+python-dotenv = "*"
+pyjwt = "*"
 
 [dev-packages]
 
