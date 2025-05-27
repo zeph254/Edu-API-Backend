@@ -8,31 +8,113 @@ metadata = MetaData()
 
 db = SQLAlchemy(metadata=metadata)
 
+user_roles = db.Table('user_roles',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),
+    db.Column('assigned_by', db.Integer, db.ForeignKey('users.id')),
+    db.Column('assigned_at', db.DateTime, default=datetime.utcnow)
+)
+
+class Role(db.Model):
+    """Role model for different user types (Teacher, Parent, Admin, etc.)"""
+    __tablename__ = 'roles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g., 'parent', 'teacher', 'admin'
+    description = db.Column(db.String(200))
+    is_default = db.Column(db.Boolean, default=False)  # For default roles like 'unverified'
+
 class User(UserMixin, db.Model):
-    """User model for all system users (teachers, admin, headteachers)"""
+    """User model for authentication"""
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
-    role = db.Column(db.String(20), nullable=False)  # 'admin', 'headteacher', 'teacher'
-    full_name = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20))
-    is_active = db.Column(db.Boolean, default=True)
+    is_email_verified = db.Column(db.Boolean, default=False)
+    email_verification_token = db.Column(db.String(100))
+    email_verification_sent_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
+    is_active = db.Column(db.Boolean, default=True)
     
-    # Relationships
-    taught_subjects = db.relationship('TeacherSubject', back_populates='teacher')
-    class_teacher = db.relationship('Class', back_populates='class_teacher')
-    recorded_attendances = db.relationship('AttendanceSession', back_populates='recorder')
+    # Profile relationship (one-to-one)
+    profile = db.relationship('UserProfile', back_populates='user', uselist=False, cascade='all, delete-orphan')
+    
+    # Relationships with Class
+    classes_taught = db.relationship('Class', back_populates='teacher', foreign_keys='Class.class_teacher_id')
+    
+    # Relationships with StudentPerformance
     recorded_performances = db.relationship('StudentPerformance', back_populates='recorded_by_user')
+    
+    # Relationships with AttendanceSession
+    recorded_attendances = db.relationship('AttendanceSession', back_populates='recorder')
+    
+    # Relationships with TeacherSubject
+    taught_subjects = db.relationship('TeacherSubject', back_populates='teacher')
+    
+    # Roles relationship (many-to-many)
+    roles = db.relationship('Role', 
+                        secondary=user_roles,
+                        primaryjoin=(user_roles.c.user_id == id),
+                        secondaryjoin=(user_roles.c.role_id == Role.id),
+                        backref=db.backref('users', lazy='dynamic'),
+                        lazy='dynamic')
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def has_role(self, role_name):
+        return self.roles.filter_by(name=role_name).first() is not None
+
+class UserProfile(db.Model):
+    """Extended user profile information"""
+    __tablename__ = 'user_profiles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True)
+    first_name = db.Column(db.String(50))
+    last_name = db.Column(db.String(50))
+    phone = db.Column(db.String(20))
+    address = db.Column(db.String(200))
+    profile_picture = db.Column(db.String(255))  # Path to image
+    account_type = db.Column(db.String(20))  # 'parent' or 'teacher'
+    is_profile_complete = db.Column(db.Boolean, default=False)
+    
+    # Teacher-specific fields
+    qualifications = db.Column(db.Text)
+    subjects = db.Column(db.String(200))  # Comma-separated subjects
+    
+    # Parent-specific fields
+    children_details = db.Column(db.Text)  # Could be JSON serialized
+    
+    # Relationship back to User
+    user = db.relationship('User', back_populates='profile')
+    
+    def get_full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+class Class(db.Model):
+    """Class/grade level model (e.g., Grade 4, Form 2)"""
+    __tablename__ = 'classes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)  # e.g., "Grade 4"
+    stream = db.Column(db.String(20))               # e.g., "A", "B" (optional)
+    academic_year = db.Column(db.String(20))
+    
+    # Relationships
+    class_teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    teacher = db.relationship('User', back_populates='classes_taught', foreign_keys=[class_teacher_id])
+    
+    # Other relationships
+    students = db.relationship('Student', back_populates='class_')
+    subjects = db.relationship('TeacherSubject', back_populates='class_')
+    timetable_entries = db.relationship('Timetable', back_populates='class_')
+    attendance_sessions = db.relationship('AttendanceSession', back_populates='class_')
 
 class Student(db.Model):
     """Student information model"""
@@ -52,23 +134,6 @@ class Student(db.Model):
     class_ = db.relationship('Class', back_populates='students')
     performances = db.relationship('StudentPerformance', back_populates='student')
     attendance_records = db.relationship('AttendanceRecord', back_populates='student')
-
-class Class(db.Model):
-    """Class/grade level model (e.g., Grade 4, Form 2)"""
-    __tablename__ = 'classes'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False)  # e.g., "Grade 4"
-    stream = db.Column(db.String(20))               # e.g., "A", "B" (optional)
-    academic_year = db.Column(db.String(20))
-    
-    # Relationships
-    class_teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    class_teacher = db.relationship('User', back_populates='class_teacher')
-    students = db.relationship('Student', back_populates='class_')
-    subjects = db.relationship('TeacherSubject', back_populates='class_')
-    timetable_entries = db.relationship('Timetable', back_populates='class_')
-    attendance_sessions = db.relationship('AttendanceSession', back_populates='class_')
 
 class Subject(db.Model):
     """Academic subject model"""

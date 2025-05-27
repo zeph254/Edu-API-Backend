@@ -1,10 +1,154 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Class, Subject, Student,TeacherSubject
+from models import db, User, Class, Subject, Student, TeacherSubject, user_roles, Role, UserProfile
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
 
 admin_bp = Blueprint('admin', __name__)
+
+# =======================ROLES======================
+@admin_bp.route('/roles', methods=['GET'])
+@jwt_required()
+def get_all_roles():
+    """Get all available roles (admin only)"""
+    current_user = User.query.get(get_jwt_identity())
+    
+    if not current_user.has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    roles = Role.query.all()
+    return jsonify([{
+        "id": role.id,
+        "name": role.name,
+        "description": role.description,
+        "user_count": len(role.users)
+    } for role in roles]), 200
+
+@admin_bp.route('/users/<int:user_id>/roles', methods=['POST'])
+@jwt_required()
+def assign_role(user_id):
+    """Assign a role to a user (admin only)"""
+    current_user = User.query.get(get_jwt_identity())
+    target_user = User.query.get_or_404(user_id)
+    
+    if not current_user.has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    data = request.get_json()
+    if 'role_id' not in data:
+        return jsonify({"error": "role_id is required"}), 400
+    
+    role = Role.query.get_or_404(data['role_id'])
+    
+    if role in target_user.roles:
+        return jsonify({"error": "User already has this role"}), 400
+    
+    try:
+        # Using the association table directly for more control
+        stmt = user_roles.insert().values(
+            user_id=user_id,
+            role_id=role.id,
+            assigned_by=current_user.id
+        )
+        db.session.execute(stmt)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Role assigned successfully",
+            "user_id": user_id,
+            "role_id": role.id,
+            "role_name": role.name
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/users/<int:user_id>/roles/<int:role_id>', methods=['DELETE'])
+@jwt_required()
+def remove_role(user_id, role_id):
+    """Remove a role from a user (admin only)"""
+    current_user = User.query.get(get_jwt_identity())
+    target_user = User.query.get_or_404(user_id)
+    role = Role.query.get_or_404(role_id)
+    
+    if not current_user.has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    if role not in target_user.roles:
+        return jsonify({"error": "User doesn't have this role"}), 400
+    
+    try:
+        # Using the association table directly
+        stmt = user_roles.delete().where(
+            (user_roles.c.user_id == user_id) &
+            (user_roles.c.role_id == role_id)
+        )
+        db.session.execute(stmt)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Role removed successfully",
+            "user_id": user_id,
+            "role_id": role_id,
+            "role_name": role.name
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/users/pending-approval', methods=['GET'])
+@jwt_required()
+def get_pending_approval_users():
+    """Get users pending approval (admin only)"""
+    current_user = User.query.get(get_jwt_identity())
+    
+    if not current_user.has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    # Get users with incomplete profiles (mainly parents waiting for approval)
+    pending_users = User.query.join(UserProfile).filter(
+        UserProfile.is_profile_complete == False
+    ).all()
+    
+    return jsonify([{
+        "user_id": user.id,
+        "email": user.email,
+        "account_type": user.profile.account_type,
+        "profile_data": {
+            "first_name": user.profile.first_name,
+            "last_name": user.profile.last_name,
+            "phone": user.profile.phone
+        }
+    } for user in pending_users]), 200
+
+@admin_bp.route('/users/<int:user_id>/approve', methods=['POST'])
+@jwt_required()
+def approve_user(user_id):
+    """Approve a user's profile (admin only)"""
+    current_user = User.query.get(get_jwt_identity())
+    target_user = User.query.get_or_404(user_id)
+    
+    if not current_user.has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    if not target_user.profile:
+        return jsonify({"error": "User has no profile"}), 400
+    
+    if target_user.profile.is_profile_complete:
+        return jsonify({"error": "User profile is already complete"}), 400
+    
+    try:
+        target_user.profile.is_profile_complete = True
+        db.session.commit()
+        
+        return jsonify({
+            "message": "User approved successfully",
+            "user_id": user_id,
+            "account_type": target_user.profile.account_type
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 # ====================== USER MANAGEMENT ======================
 
