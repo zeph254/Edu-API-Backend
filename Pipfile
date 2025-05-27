@@ -12,6 +12,8 @@ flask-jwt-extended = "*"
 flask-login = "*"
 python-dotenv = "*"
 pyjwt = "*"
+flask-mail = "*"
+greenlet = "*"
 
 [dev-packages]
 
