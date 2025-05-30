@@ -105,20 +105,20 @@ def get_pending_approval_users():
     if not current_user.has_role('admin'):
         return jsonify({"error": "Unauthorized access"}), 403
     
-    # Get users with incomplete profiles (mainly parents waiting for approval)
+    # Get teachers with incomplete profiles (waiting for approval)
     pending_users = User.query.join(UserProfile).filter(
+        UserProfile.account_type == 'teacher',
         UserProfile.is_profile_complete == False
     ).all()
     
     return jsonify([{
         "user_id": user.id,
         "email": user.email,
-        "account_type": user.profile.account_type,
-        "profile_data": {
-            "first_name": user.profile.first_name,
-            "last_name": user.profile.last_name,
-            "phone": user.profile.phone
-        }
+        "first_name": user.profile.first_name,
+        "last_name": user.profile.last_name,
+        "qualifications": user.profile.qualifications,
+        "subjects": user.profile.subjects,
+        "applied_at": user.profile.created_at.isoformat() if user.profile.created_at else None
     } for user in pending_users]), 200
 
 @admin_bp.route('/users/<int:user_id>/approve', methods=['POST'])
@@ -134,15 +134,21 @@ def approve_user(user_id):
     if not target_user.profile:
         return jsonify({"error": "User has no profile"}), 400
     
+    if target_user.profile.account_type != 'teacher':
+        return jsonify({"error": "Only teacher accounts require approval"}), 400
+    
     if target_user.profile.is_profile_complete:
-        return jsonify({"error": "User profile is already complete"}), 400
+        return jsonify({"error": "User profile is already approved"}), 400
     
     try:
         target_user.profile.is_profile_complete = True
         db.session.commit()
         
+        from .email_service import send_approval_notification
+        send_approval_notification(target_user.email, approved=True)
+        
         return jsonify({
-            "message": "User approved successfully",
+            "message": "Teacher approved successfully",
             "user_id": user_id,
             "account_type": target_user.profile.account_type
         }), 200
