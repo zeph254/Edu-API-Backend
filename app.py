@@ -81,15 +81,20 @@ def create_default_roles():
     """Create default roles if they don't exist"""
     with app.app_context():
         default_roles = [
-            {'name': 'admin', 'description': 'System administrator', 'is_default': False},
-            {'name': 'teacher', 'description': 'School teacher', 'is_default': False},
-            {'name': 'parent', 'description': 'Student parent', 'is_default': False},
-            {'name': 'unverified', 'description': 'New unverified user', 'is_default': True}
+            {'name': 'admin', 'description': 'System administrator', 'is_default': False, 'permissions': 'admin'},
+            {'name': 'teacher', 'description': 'School teacher', 'is_default': False, 'permissions': 'teacher'},
+            {'name': 'parent', 'description': 'Student parent', 'is_default': False, 'permissions': 'parent'},
+            {'name': 'unverified', 'description': 'New unverified user', 'is_default': True, 'permissions': ''}
         ]
         
         for role_data in default_roles:
             if not Role.query.filter_by(name=role_data['name']).first():
-                role = Role(**role_data)
+                role = Role(
+                    name=role_data['name'],
+                    description=role_data['description'],
+                    is_default=role_data['is_default'],
+                    permissions=role_data['permissions']
+                )
                 db.session.add(role)
         
         db.session.commit()

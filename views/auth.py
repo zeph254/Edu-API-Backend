@@ -176,7 +176,6 @@ def verify_email(token):
 @auth_bp.route('/complete-profile', methods=['POST'])
 @jwt_required()
 def complete_profile():
-    """Complete user profile after email verification"""
     current_user_id = get_jwt_identity()
     user = User.query.get_or_404(current_user_id)
     
@@ -193,12 +192,29 @@ def complete_profile():
         # Create or update user profile
         profile = user.profile or UserProfile(user_id=user.id)
         
+        # Common fields
         profile.first_name = data['first_name']
         profile.last_name = data['last_name']
         profile.phone = data.get('phone')
         profile.account_type = data['account_type']
         
-        # Set role based on account type
+        # Handle account type specific fields
+        if data['account_type'] == 'teacher':
+            if not data.get('qualifications'):
+                return jsonify({"error": "Qualifications are required for teachers"}), 400
+            profile.qualifications = data['qualifications']
+            profile.subjects = data.get('subjects', '')
+            profile.is_profile_complete = False  # Teachers need admin approval
+        else:  # Parent
+            if not data.get('children_details'):
+                return jsonify({"error": "Children details are required for parents"}), 400
+            profile.children_details = data['children_details']
+            profile.is_profile_complete = True  # Parents are auto-approved
+        
+        if not user.profile:
+            user.profile = profile
+        
+        # Assign role based on account type
         role = Role.query.filter_by(name=data['account_type']).first()
         if role:
             user.roles.append(role)
@@ -208,26 +224,18 @@ def complete_profile():
         if default_role and default_role in user.roles:
             user.roles.remove(default_role)
         
-        # Handle account type specific fields
-        if data['account_type'] == 'teacher':
-            profile.qualifications = data.get('qualifications')
-            profile.subjects = data.get('subjects')
-            profile.is_profile_complete = True  # Teachers can complete profile immediately
-        else:  # Parent
-            profile.children_details = data.get('children_details')
-            # Parents might need admin approval
-            profile.is_profile_complete = False
-        
-        if not user.profile:
-            user.profile = profile
-        
         db.session.commit()
+        
+        # Send appropriate email
+        from .email_service import send_welcome_email
+        send_welcome_email(user.email, profile.account_type)
         
         return jsonify({
             "message": "Profile completed successfully",
             "status": "active" if profile.is_profile_complete else "pending_approval",
             "user_id": user.id,
-            "account_type": profile.account_type
+            "account_type": profile.account_type,
+            "next_steps": ["wait_for_approval"] if profile.account_type == 'teacher' else []
         }), 200
     
     except Exception as e:

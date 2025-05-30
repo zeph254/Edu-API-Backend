@@ -38,3 +38,38 @@ def send_verification_email(email, verification_url):
                 continue
             current_app.logger.error(f"Failed to send verification email after {max_retries} attempts")
             return False
+# Update emailservice.py with these additions
+
+def send_welcome_email(email, account_type):
+    """Send welcome email after profile completion"""
+    msg = Message(
+        subject=f"Welcome to Our School System ({account_type.capitalize()})",
+        recipients=[email],
+        sender=current_app.config['MAIL_DEFAULT_SENDER']
+    )
+    
+    if account_type == 'teacher':
+        msg.body = "Your teacher account has been created and is pending admin approval."
+        msg.html = render_template('email/welcome_teacher.html')
+    else:
+        msg.body = "Your parent account has been created successfully."
+        msg.html = render_template('email/welcome_parent.html')
+    
+    mail.send(msg)
+
+def send_approval_notification(email, approved=True):
+    """Send notification when account is approved/rejected"""
+    msg = Message(
+        subject="Your Account Status Update",
+        recipients=[email],
+        sender=current_app.config['MAIL_DEFAULT_SENDER']
+    )
+    
+    if approved:
+        msg.body = "Your account has been approved by the administrator."
+        msg.html = render_template('email/account_approved.html')
+    else:
+        msg.body = "Your account requires additional information for approval."
+        msg.html = render_template('email/account_rejected.html')
+    
+    mail.send(msg)        

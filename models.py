@@ -20,9 +20,13 @@ class Role(db.Model):
     __tablename__ = 'roles'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g., 'parent', 'teacher', 'admin'
+    name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.String(200))
-    is_default = db.Column(db.Boolean, default=False)  # For default roles like 'unverified'
+    is_default = db.Column(db.Boolean, default=False)
+    permissions = db.Column(db.String(500))  # Comma-separated permissions
+    
+    def has_permission(self, permission):
+        return permission in self.permissions.split(',')
 
 class User(UserMixin, db.Model):
     """User model for authentication"""
