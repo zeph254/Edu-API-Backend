@@ -1,3 +1,4 @@
+from flask import Flask
 from .auth import *
 from .admin import *
 from .academics import *

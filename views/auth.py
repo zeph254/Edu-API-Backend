@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, current_app, url_for
+from flask import Flask, Blueprint, request, jsonify, current_app, url_for
 from flask_jwt_extended import (
     create_access_token, jwt_required, get_jwt_identity,
     create_refresh_token, set_refresh_cookies, unset_jwt_cookies
@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import jwt
 from models import db, User, UserProfile, Role
 from .oauth import init_oauth, handle_oauth_callback, get_oauth_provider
-from .email_service import send_verification_email  # You'll need to implement this
+from .email_service import send_verification_email, send_password_reset_email  # You'll need to implement these
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
