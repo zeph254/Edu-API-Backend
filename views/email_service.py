@@ -73,3 +73,39 @@ def send_approval_notification(email, approved=True):
         msg.html = render_template('email/account_rejected.html')
     
     mail.send(msg)        
+
+
+def send_password_reset_email(email, reset_url):
+    """Send password reset email with retry logic"""
+    msg = Message(
+        subject="Password Reset Request",
+        recipients=[email],
+        sender=current_app.config['MAIL_DEFAULT_SENDER']
+    )
+    
+    msg.body = f"""
+    You requested a password reset. Click the link below to reset your password:
+    {reset_url}
+    
+    This link will expire in 1 hour.
+    """
+    
+    msg.html = render_template(
+        'email/reset_password.html',
+        reset_url=reset_url,
+        year=datetime.now().year
+    )
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            mail.send(msg)
+            current_app.logger.info(f"Password reset email sent to {email}")
+            return True
+        except Exception as e:
+            current_app.logger.error(f"Attempt {attempt + 1} failed to send email to {email}: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(2)  # wait before retrying
+                continue
+            current_app.logger.error(f"Failed to send password reset email after {max_retries} attempts")
+            return False    

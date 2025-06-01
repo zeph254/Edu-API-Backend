@@ -41,6 +41,8 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
     is_active = db.Column(db.Boolean, default=True)
+    reset_token = db.Column(db.String(100))
+    reset_sent_at = db.Column(db.DateTime)
     
     # Profile relationship (one-to-one)
     profile = db.relationship('UserProfile', back_populates='user', uselist=False, cascade='all, delete-orphan')

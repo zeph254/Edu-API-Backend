@@ -7,22 +7,46 @@ from sqlalchemy.exc import IntegrityError
 admin_bp = Blueprint('admin', __name__)
 
 # =======================ROLES======================
-@admin_bp.route('/roles', methods=['GET'])
+# In admin.py
+@admin_bp.route('/roles', methods=['POST'])
 @jwt_required()
-def get_all_roles():
-    """Get all available roles (admin only)"""
+def create_role():
+    """Create a new role (admin only)"""
     current_user = User.query.get(get_jwt_identity())
     
     if not current_user.has_role('admin'):
         return jsonify({"error": "Unauthorized access"}), 403
     
-    roles = Role.query.all()
-    return jsonify([{
-        "id": role.id,
-        "name": role.name,
-        "description": role.description,
-        "user_count": len(role.users)
-    } for role in roles]), 200
+    data = request.get_json()
+    required_fields = ['name', 'description']
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Name and description are required"}), 400
+    
+    try:
+        new_role = Role(
+            name=data['name'],
+            description=data['description'],
+            permissions=','.join(data.get('permissions', []))
+        )
+        
+        db.session.add(new_role)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Role created successfully",
+            "role": {
+                "id": new_role.id,
+                "name": new_role.name,
+                "description": new_role.description,
+                "permissions": new_role.permissions.split(',')
+            }
+        }), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Role with this name already exists"}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/users/<int:user_id>/roles', methods=['POST'])
 @jwt_required()
