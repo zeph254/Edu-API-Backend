@@ -3,10 +3,31 @@ from flask_jwt_extended import JWTManager
 from flask_login import LoginManager
 from flask_migrate import Migrate
 from flask_mail import Mail
+from flask_cors import CORS  # <-- Add this import
 from datetime import timedelta
 from models import db, User, Role  # Ensure User model is imported
+import os
+import cloudinary
+import cloudinary.uploader
+
+
+cloudinary.config(
+    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.getenv('CLOUDINARY_API_KEY'),
+    api_secret=os.getenv('CLOUDINARY_API_SECRET'),
+    secure=True
+)
 
 app = Flask(__name__)
+
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:5173/"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///school.db'

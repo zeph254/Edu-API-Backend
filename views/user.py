@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, User
 from werkzeug.security import generate_password_hash
+from flask import request
+from utils.cloudinary_utils import upload_image_to_cloudinary, delete_image_from_cloudinary
 
 user_bp = Blueprint('user_bp', __name__)
 
@@ -147,3 +149,79 @@ def get_current_user():
     }
     
     return jsonify(user_data), 200
+
+@user_bp.route('/users/<int:user_id>/profile-picture', methods=['POST'])
+@jwt_required()
+def upload_profile_picture(user_id):
+    """Upload a profile picture for a user"""
+    current_user_id = get_jwt_identity()
+    
+    # Check if user is updating their own profile or is admin
+    if current_user_id != user_id and not User.query.get(current_user_id).has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    user = User.query.get_or_404(user_id)
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files['file']
+    
+    try:
+        # Delete old picture if exists
+        if user.profile and user.profile.profile_picture_public_id:
+            delete_image_from_cloudinary(user.profile.profile_picture_public_id)
+        
+        # Upload new picture
+        upload_result = upload_image_to_cloudinary(file)
+        
+        # Create profile if doesn't exist
+        if not user.profile:
+            user.profile = UserProfile(user_id=user.id)
+            db.session.add(user.profile)
+        
+        # Update profile with new picture info
+        user.profile.profile_picture_public_id = upload_result['public_id']
+        user.profile.profile_picture_url = upload_result['url']
+        
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Profile picture updated successfully",
+            "image_url": upload_result['url']
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@user_bp.route('/users/<int:user_id>/profile-picture', methods=['DELETE'])
+@jwt_required()
+def delete_profile_picture(user_id):
+    """Delete a user's profile picture"""
+    current_user_id = get_jwt_identity()
+    
+    # Check if user is updating their own profile or is admin
+    if current_user_id != user_id and not User.query.get(current_user_id).has_role('admin'):
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    user = User.query.get_or_404(user_id)
+    
+    if not user.profile or not user.profile.profile_picture_public_id:
+        return jsonify({"error": "No profile picture to delete"}), 400
+    
+    try:
+        delete_result = delete_image_from_cloudinary(user.profile.profile_picture_public_id)
+        
+        user.profile.profile_picture_public_id = None
+        user.profile.profile_picture_url = None
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Profile picture deleted successfully",
+            "result": delete_result
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500

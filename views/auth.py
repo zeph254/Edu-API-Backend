@@ -187,7 +187,13 @@ def complete_profile():
     if not user.is_email_verified:
         return jsonify({"error": "Please verify your email first"}), 403
     
-    data = request.get_json()
+    # Check if form data is multipart/form-data
+    if 'file' in request.files:
+        file = request.files['file']
+    else:
+        file = None
+    
+    data = request.form
     
     # Validate account type
     if 'account_type' not in data or data['account_type'] not in ['parent', 'teacher']:
@@ -202,6 +208,12 @@ def complete_profile():
         profile.last_name = data['last_name']
         profile.phone = data.get('phone')
         profile.account_type = data['account_type']
+        
+        # Handle file upload
+        if file and file.filename != '':
+            upload_result = upload_image_to_cloudinary(file)
+            profile.profile_picture_public_id = upload_result['public_id']
+            profile.profile_picture_url = upload_result['url']
         
         # Handle account type specific fields
         if data['account_type'] == 'teacher':
@@ -240,6 +252,7 @@ def complete_profile():
             "status": "active" if profile.is_profile_complete else "pending_approval",
             "user_id": user.id,
             "account_type": profile.account_type,
+            "profile_picture_url": profile.profile_picture_url,
             "next_steps": ["wait_for_approval"] if profile.account_type == 'teacher' else []
         }), 200
     

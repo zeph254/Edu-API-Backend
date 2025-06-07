@@ -86,7 +86,11 @@ class UserProfile(db.Model):
     last_name = db.Column(db.String(50))
     phone = db.Column(db.String(20))
     address = db.Column(db.String(200))
-    profile_picture = db.Column(db.String(255))  # Path to image
+    
+    # Cloudinary image fields
+    profile_picture_public_id = db.Column(db.String(255))
+    profile_picture_url = db.Column(db.String(255))
+    
     account_type = db.Column(db.String(20))  # 'parent' or 'teacher'
     is_profile_complete = db.Column(db.Boolean, default=False)
     
